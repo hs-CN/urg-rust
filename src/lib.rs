@@ -3,6 +3,7 @@ use bstr::{BString, ByteSlice};
 use std::{
     io::{self, BufRead, BufReader, BufWriter, Write},
     net::{IpAddr, TcpStream},
+    num::NonZeroU32,
     str::FromStr,
     sync::Arc,
 };
@@ -146,6 +147,84 @@ impl Urg {
         Ok((time_stamp, distance))
     }
 
+    pub fn get_distance_multi(
+        &mut self,
+        start_step: u32,
+        end_step: u32,
+        cluster_count: u32,
+        scan_skip_count: u32,
+        num_of_scan: NonZeroU32,
+    ) -> anyhow::Result<Vec<(u32, Vec<u32>)>> {
+        let reader = self.stream.clone();
+        let mut reader = BufReader::new(reader.as_ref());
+        let writer = self.stream.clone();
+        let mut writer = BufWriter::new(writer.as_ref());
+        let mut buffer = Vec::new();
+
+        let cmd = format!(
+            "MD{:0>4}{:0>4}{:0>2}{:0>1}{:0>2}",
+            start_step, end_step, cluster_count, scan_skip_count, num_of_scan
+        );
+        Self::send_cmd(&mut reader, &mut writer, &mut buffer, &cmd, "00")?;
+        _ = Self::recv_data(&mut reader, &mut buffer)?;
+
+        let mut remaining_scan = num_of_scan.get();
+        let mut datas = Vec::with_capacity(num_of_scan.get() as usize);
+        loop {
+            remaining_scan -= 1;
+            let cmd = format!(
+                "MD{:0>4}{:0>4}{:0>2}{:0>1}{:0>2}",
+                start_step, end_step, cluster_count, scan_skip_count, remaining_scan
+            );
+            let (time_stamp, raw_data) =
+                Self::get_capture_raw_data_multi(&mut reader, &mut buffer, &cmd, "99")?;
+            let mut distance = Vec::new();
+            for bytes in raw_data.chunks_exact(3) {
+                distance.push(Self::decode(bytes));
+            }
+            datas.push((time_stamp, distance));
+            if remaining_scan == 0 {
+                break;
+            }
+        }
+        Ok(datas)
+    }
+
+    pub fn get_distance_infinite(
+        &mut self,
+        start_step: u32,
+        end_step: u32,
+        cluster_count: u32,
+        scan_skip_count: u32,
+        callback_break: impl Fn(u32, Vec<u32>) -> bool,
+    ) -> anyhow::Result<()> {
+        let reader = self.stream.clone();
+        let mut reader = BufReader::new(reader.as_ref());
+        let writer = self.stream.clone();
+        let mut writer = BufWriter::new(writer.as_ref());
+        let mut buffer = Vec::new();
+
+        let cmd = format!(
+            "MD{:0>4}{:0>4}{:0>2}{:0>1}00",
+            start_step, end_step, cluster_count, scan_skip_count
+        );
+        Self::send_cmd(&mut reader, &mut writer, &mut buffer, &cmd, "00")?;
+        _ = Self::recv_data(&mut reader, &mut buffer)?;
+
+        loop {
+            let (time_stamp, raw_data) =
+                Self::get_capture_raw_data_multi(&mut reader, &mut buffer, &cmd, "99")?;
+            let mut distance = Vec::new();
+            for bytes in raw_data.chunks_exact(3) {
+                distance.push(Self::decode(bytes));
+            }
+            if callback_break(time_stamp, distance) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     pub fn get_distance_intensity(
         &mut self,
         start_step: u32,
@@ -161,6 +240,88 @@ impl Urg {
             intensity.push(Self::decode(&bytes[3..6]));
         }
         Ok((time_stamp, distance, intensity))
+    }
+
+    pub fn get_distance_intensity_multi(
+        &mut self,
+        start_step: u32,
+        end_step: u32,
+        cluster_count: u32,
+        scan_skip_count: u32,
+        num_of_scan: NonZeroU32,
+    ) -> anyhow::Result<Vec<(u32, Vec<u32>, Vec<u32>)>> {
+        let reader = self.stream.clone();
+        let mut reader = BufReader::new(reader.as_ref());
+        let writer = self.stream.clone();
+        let mut writer = BufWriter::new(writer.as_ref());
+        let mut buffer = Vec::new();
+
+        let cmd = format!(
+            "ME{:0>4}{:0>4}{:0>2}{:0>1}{:0>2}",
+            start_step, end_step, cluster_count, scan_skip_count, num_of_scan
+        );
+        Self::send_cmd(&mut reader, &mut writer, &mut buffer, &cmd, "00")?;
+        _ = Self::recv_data(&mut reader, &mut buffer)?;
+
+        let mut remaining_scan = num_of_scan.get();
+        let mut datas = Vec::with_capacity(num_of_scan.get() as usize);
+        loop {
+            remaining_scan -= 1;
+            let cmd = format!(
+                "ME{:0>4}{:0>4}{:0>2}{:0>1}{:0>2}",
+                start_step, end_step, cluster_count, scan_skip_count, remaining_scan
+            );
+            let (time_stamp, raw_data) =
+                Self::get_capture_raw_data_multi(&mut reader, &mut buffer, &cmd, "99")?;
+            let mut distance = Vec::new();
+            let mut intensity = Vec::new();
+            for bytes in raw_data.chunks_exact(6) {
+                distance.push(Self::decode(&bytes[0..3]));
+                intensity.push(Self::decode(&bytes[3..6]));
+            }
+            datas.push((time_stamp, distance, intensity));
+            if remaining_scan == 0 {
+                break;
+            }
+        }
+        Ok(datas)
+    }
+
+    pub fn get_distance_intensity_infinite(
+        &mut self,
+        start_step: u32,
+        end_step: u32,
+        cluster_count: u32,
+        scan_skip_count: u32,
+        callback_break: impl Fn(u32, Vec<u32>, Vec<u32>) -> bool,
+    ) -> anyhow::Result<()> {
+        let reader = self.stream.clone();
+        let mut reader = BufReader::new(reader.as_ref());
+        let writer = self.stream.clone();
+        let mut writer = BufWriter::new(writer.as_ref());
+        let mut buffer = Vec::new();
+
+        let cmd = format!(
+            "ME{:0>4}{:0>4}{:0>2}{:0>1}00",
+            start_step, end_step, cluster_count, scan_skip_count
+        );
+        Self::send_cmd(&mut reader, &mut writer, &mut buffer, &cmd, "00")?;
+        _ = Self::recv_data(&mut reader, &mut buffer)?;
+
+        loop {
+            let (time_stamp, raw_data) =
+                Self::get_capture_raw_data_multi(&mut reader, &mut buffer, &cmd, "99")?;
+            let mut distance = Vec::new();
+            let mut intensity = Vec::new();
+            for bytes in raw_data.chunks_exact(6) {
+                distance.push(Self::decode(&bytes[0..3]));
+                intensity.push(Self::decode(&bytes[3..6]));
+            }
+            if callback_break(time_stamp, distance, intensity) {
+                break;
+            }
+        }
+        Ok(())
     }
 
     // read status information
@@ -233,6 +394,34 @@ impl Urg {
         Ok((time_stamp, raw_data))
     }
 
+    fn get_capture_raw_data_multi(
+        reader: &mut impl BufRead,
+        buffer: &mut Vec<u8>,
+        cmd: &str,
+        ok_status: &str,
+    ) -> anyhow::Result<(u32, Vec<u8>)> {
+        Self::check_send_cmd_response(reader, buffer, cmd, ok_status)?;
+        let n = Self::recv_data(reader, buffer)?;
+        if n != 6 {
+            bail!(
+                "get_distance failed. recv wrong timestamp data {:?}",
+                buffer
+            );
+        }
+        let time_stamp = Self::decode(&buffer[..4]);
+
+        let mut raw_data: Vec<u8> = Vec::new();
+        loop {
+            let n = Self::recv_data(reader, buffer)?;
+            if n == 1 {
+                break;
+            } else {
+                raw_data.extend_from_slice(&buffer[..n - 2]);
+            }
+        }
+        Ok((time_stamp, raw_data))
+    }
+
     #[inline]
     fn recv_data(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> io::Result<usize> {
         buffer.clear();
@@ -274,7 +463,15 @@ impl Urg {
         writer.write(cmd.as_bytes())?;
         writer.write(&[b'\n'])?;
         writer.flush()?;
+        Self::check_send_cmd_response(reader, buffer, cmd, ok_status)
+    }
 
+    fn check_send_cmd_response(
+        reader: &mut impl BufRead,
+        buffer: &mut Vec<u8>,
+        cmd: &str,
+        ok_status: &str,
+    ) -> anyhow::Result<()> {
         let n = Self::recv_data(reader, buffer)?;
         if &buffer[..n - 1] != cmd.as_bytes() {
             bail!(
@@ -284,7 +481,6 @@ impl Urg {
                 cmd
             );
         }
-
         let n = Self::recv_data(reader, buffer)?;
         if &buffer[..n - 2] != ok_status.as_bytes() {
             bail!(
@@ -294,7 +490,6 @@ impl Urg {
                 &buffer[..n - 2].as_bstr()
             );
         }
-
         Ok(())
     }
 }
