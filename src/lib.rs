@@ -4,7 +4,6 @@ use std::{
     io::{self, BufRead, BufReader, BufWriter, Write},
     net::{IpAddr, TcpStream},
     num::NonZeroU32,
-    str::FromStr,
     sync::Arc,
 };
 
@@ -33,7 +32,7 @@ pub struct Urg {
     pub sensor_model: BString,
     pub min_distance_mm: u32,
     pub max_distance_mm: u32,
-    pub angular_resolution: u32,
+    pub angular_resolution_deg: f32,
     pub start_step: u32,
     pub end_step: u32,
     pub front_dir_step: u32,
@@ -41,8 +40,7 @@ pub struct Urg {
 }
 
 impl Urg {
-    pub fn open(ip_addr: &str, port: u16) -> anyhow::Result<Self> {
-        let ip_addr = IpAddr::from_str(ip_addr)?;
+    pub fn open(ip_addr: IpAddr, port: u16) -> anyhow::Result<Self> {
         let stream = Arc::new(TcpStream::connect((ip_addr, port))?);
 
         let reader = stream.clone();
@@ -65,7 +63,8 @@ impl Urg {
         let sensor_model = Self::recv_b_string_sub(&mut reader, &mut buffer)?;
         let min_distance_mm = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
         let max_distance_mm = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
-        let angular_resolution = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
+        let angular_area = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
+        let angular_resolution_deg = 360.0 / angular_area as f32;
         let start_step = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
         let end_step = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
         let front_dir_step = Self::recv_b_string_u32(&mut reader, &mut buffer)?;
@@ -86,7 +85,7 @@ impl Urg {
             sensor_model,
             min_distance_mm,
             max_distance_mm,
-            angular_resolution,
+            angular_resolution_deg,
             start_step,
             end_step,
             front_dir_step,
