@@ -6,10 +6,10 @@ fn main() {
     println!("{:?}", urg.get_status_info().unwrap());
 
     let count = std::cell::Cell::new(0);
-    urg.get_distance_intensity_infinite(0, 1080, 0, 0, |time_stamp, distance, intensity| {
-        println!("{}", time_stamp);
-        println!("{:?}", distance);
-        println!("{:?}", intensity);
+    urg.get_distance_intensity_infinite(0, 1080, 0, 0, |payload| {
+        println!("{}", payload.time_stamp);
+        println!("{:?}", payload.distance);
+        println!("{:?}", payload.intensity);
         count.set(count.get() + 1);
         count.get() == 11
     })
