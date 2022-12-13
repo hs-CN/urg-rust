@@ -8,13 +8,3 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.66"
 bstr = "1.0.1"
-modbus = "1.0.5"
-
-[dev-dependencies]
-log = "0.4.17"
-serde = { version = "1.0.148", features = ["derive"] }
-simple_logger = "4.0.0"
-toml = "0.5.9"
-ndarray = "0.15.6"
-ndarray-linalg = { version = "0.16.0", features = ["intel-mkl-static"] }
-ctrlc = "3.2.4"
