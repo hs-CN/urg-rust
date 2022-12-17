@@ -1,4 +1,3 @@
-use anyhow::bail;
 use bstr::{BString, ByteSlice};
 use std::{
     io::{self, BufRead, BufReader, BufWriter, Write},
@@ -7,7 +6,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct StatusInfo {
+pub struct UrgStatusInfo {
     pub sensor_model: BString,
     pub laser_status: BString,
     pub scanning_speed_rpm: u32,
@@ -18,7 +17,7 @@ pub struct StatusInfo {
 }
 
 #[derive(Debug)]
-pub struct VersionInfo {
+pub struct UrgVersionInfo {
     pub vendor_info: BString,
     pub product_info: BString,
     pub firmware_version: BString,
@@ -27,7 +26,7 @@ pub struct VersionInfo {
 }
 
 #[derive(Debug)]
-pub struct SensorParams {
+pub struct UrgSensorParams {
     pub sensor_model: BString,
     pub min_distance_mm: u32,
     pub max_distance_mm: u32,
@@ -45,7 +44,7 @@ pub struct UrgPayload {
     pub intensity: Vec<u32>,
 }
 
-pub struct UrgPayloadIter {
+pub struct UrgPayloadIterator {
     stream: Arc<TcpStream>,
     count: Option<u32>,
     cmd: String,
@@ -53,8 +52,8 @@ pub struct UrgPayloadIter {
     buffer: Vec<u8>,
 }
 
-impl Iterator for UrgPayloadIter {
-    type Item = anyhow::Result<UrgPayload>;
+impl Iterator for UrgPayloadIterator {
+    type Item = io::Result<UrgPayload>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(count) = self.count {
@@ -65,10 +64,11 @@ impl Iterator for UrgPayloadIter {
 
         let mut reader = BufReader::new(self.stream.as_ref());
         if let Some(count) = self.count {
-            self.count = Some(count - 1);
             let cmd = format!("{}{:0>2}", &self.cmd[..self.cmd.len() - 2], count - 1);
             if let Err(err) = check_send_cmd_response(&mut reader, &mut self.buffer, &cmd, "99") {
                 return Some(Err(err));
+            } else {
+                self.count = Some(count - 1);
             }
         } else if let Err(err) =
             check_send_cmd_response(&mut reader, &mut self.buffer, &self.cmd, "99")
@@ -126,7 +126,7 @@ impl Urg {
         })
     }
 
-    pub fn get_version_info(&self) -> anyhow::Result<VersionInfo> {
+    pub fn get_version_info(&self) -> io::Result<UrgVersionInfo> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -141,7 +141,7 @@ impl Urg {
         let serial_number = Self::recv_b_string_sub(&mut reader, &mut buffer)?;
         _ = recv_data(&mut reader, &mut buffer)?;
 
-        Ok(VersionInfo {
+        Ok(UrgVersionInfo {
             vendor_info,
             product_info,
             firmware_version,
@@ -150,7 +150,7 @@ impl Urg {
         })
     }
 
-    pub fn get_sensor_params(&self) -> anyhow::Result<SensorParams> {
+    pub fn get_sensor_params(&self) -> io::Result<UrgSensorParams> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -170,7 +170,7 @@ impl Urg {
         // let scan_direction = Self::recv_b_string(&mut reader, &mut buffer)?;
         _ = recv_data(&mut reader, &mut buffer)?;
 
-        Ok(SensorParams {
+        Ok(UrgSensorParams {
             sensor_model,
             min_distance_mm,
             max_distance_mm,
@@ -182,7 +182,7 @@ impl Urg {
         })
     }
 
-    pub fn get_status_info(&self) -> anyhow::Result<StatusInfo> {
+    pub fn get_status_info(&self) -> io::Result<UrgStatusInfo> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -199,7 +199,7 @@ impl Urg {
         let sensor_status = Self::recv_b_string_sub(&mut reader, &mut buffer)?;
         _ = recv_data(&mut reader, &mut buffer)?;
 
-        Ok(StatusInfo {
+        Ok(UrgStatusInfo {
             sensor_model,
             laser_status,
             scanning_speed_rpm,
@@ -210,7 +210,7 @@ impl Urg {
         })
     }
 
-    pub fn start_capture(&mut self) -> anyhow::Result<()> {
+    pub fn start_capture(&mut self) -> io::Result<()> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -224,7 +224,7 @@ impl Urg {
         Ok(())
     }
 
-    pub fn stop_capture(&mut self) -> anyhow::Result<()> {
+    pub fn stop_capture(&mut self) -> io::Result<()> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -238,7 +238,7 @@ impl Urg {
         Ok(())
     }
 
-    pub fn reboot(self) -> anyhow::Result<()> {
+    pub fn reboot(self) -> io::Result<()> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream;
@@ -258,7 +258,7 @@ impl Urg {
         start_step: u32,
         end_step: u32,
         cluster_count: u32,
-    ) -> anyhow::Result<UrgPayload> {
+    ) -> io::Result<UrgPayload> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -287,7 +287,7 @@ impl Urg {
         cluster_count: u32,
         scan_skip_count: u32,
         num_of_scan: u32,
-    ) -> anyhow::Result<UrgPayloadIter> {
+    ) -> io::Result<UrgPayloadIterator> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -307,7 +307,7 @@ impl Urg {
             Some(num_of_scan)
         };
 
-        Ok(UrgPayloadIter {
+        Ok(UrgPayloadIterator {
             stream: self.stream.clone(),
             count,
             cmd,
@@ -321,7 +321,7 @@ impl Urg {
         start_step: u32,
         end_step: u32,
         cluster_count: u32,
-    ) -> anyhow::Result<UrgPayload> {
+    ) -> io::Result<UrgPayload> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -351,7 +351,7 @@ impl Urg {
         cluster_count: u32,
         scan_skip_count: u32,
         num_of_scan: u32,
-    ) -> anyhow::Result<UrgPayloadIter> {
+    ) -> io::Result<UrgPayloadIterator> {
         let reader = self.stream.clone();
         let mut reader = BufReader::new(reader.as_ref());
         let writer = self.stream.clone();
@@ -371,7 +371,7 @@ impl Urg {
             Some(num_of_scan)
         };
 
-        Ok(UrgPayloadIter {
+        Ok(UrgPayloadIterator {
             stream: self.stream.clone(),
             count,
             cmd,
@@ -380,29 +380,35 @@ impl Urg {
         })
     }
 
-    fn recv_b_string(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> anyhow::Result<BString> {
+    fn recv_b_string(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> io::Result<BString> {
         let n = recv_data(reader, buffer)?;
         if n < 2 {
-            bail!("can not convert to BString. recv bytes len:{n}");
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("can not convert to BString. recv bytes len:{n}"),
+            ));
         }
         Ok(BString::new(buffer[..n - 2].to_vec()))
     }
 
-    fn recv_b_string_sub(
-        reader: &mut impl BufRead,
-        buffer: &mut Vec<u8>,
-    ) -> anyhow::Result<BString> {
+    fn recv_b_string_sub(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> io::Result<BString> {
         let str = Self::recv_b_string(reader, buffer)?;
         let len = str.len();
         if len < 6 {
-            bail!("can not sub BString. BString:{str} length: {len}")
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("can not sub BString. BString:{str} length: {len}"),
+            ));
         }
         Ok(BString::new(str[5..len - 1].to_vec()))
     }
 
-    fn recv_b_string_u32(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> anyhow::Result<u32> {
-        let digit_str = Self::recv_b_string_sub(reader, buffer)?;
-        Ok(digit_str.to_str()?.parse()?)
+    fn recv_b_string_u32(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> io::Result<u32> {
+        Self::recv_b_string_sub(reader, buffer)?
+            .to_str()
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
+            .parse()
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 
     fn send_cmd(
@@ -411,7 +417,7 @@ impl Urg {
         buffer: &mut Vec<u8>,
         cmd: &str,
         ok_status: &str,
-    ) -> anyhow::Result<()> {
+    ) -> io::Result<()> {
         writer.write_all(cmd.as_bytes())?;
         writer.write_all(&[b'\n'])?;
         writer.flush()?;
@@ -428,13 +434,16 @@ fn decode(raw: &[u8]) -> u32 {
     res
 }
 
-fn get_raw_data(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> anyhow::Result<(u32, Vec<u8>)> {
+fn get_raw_data(reader: &mut impl BufRead, buffer: &mut Vec<u8>) -> io::Result<(u32, Vec<u8>)> {
     let n = recv_data(reader, buffer)?;
     if n != 6 {
-        bail!(
-            "get_distance failed. recv wrong timestamp data {:?}",
-            buffer
-        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "get_raw_data failed. recv wrong timestamp data {:?}",
+                buffer
+            ),
+        ));
     }
     let time_stamp = decode(&buffer[..4]);
 
@@ -461,24 +470,30 @@ fn check_send_cmd_response(
     buffer: &mut Vec<u8>,
     cmd: &str,
     ok_status: &str,
-) -> anyhow::Result<()> {
+) -> io::Result<()> {
     let n = recv_data(reader, buffer)?;
     if &buffer[..n - 1] != cmd.as_bytes() {
-        bail!(
-            "send cmd: {} failed. recv {} != {}",
-            cmd,
-            &buffer[..n - 1].as_bstr(),
-            cmd
-        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "send cmd: {} failed. recv {} != {}",
+                cmd,
+                &buffer[..n - 1].as_bstr(),
+                cmd
+            ),
+        ));
     }
     let n = recv_data(reader, buffer)?;
     if &buffer[..n - 2] != ok_status.as_bytes() {
-        bail!(
-            "send cmd: {} failed, status error {} != {}",
-            cmd,
-            ok_status,
-            &buffer[..n - 2].as_bstr()
-        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "send cmd: {} failed, status error {} != {}",
+                cmd,
+                ok_status,
+                &buffer[..n - 2].as_bstr()
+            ),
+        ));
     }
     Ok(())
 }
