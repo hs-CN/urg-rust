@@ -7,15 +7,13 @@ fn main() {
 
     let payload = urg.get_distance_intensity_multi(0, 1080, 0, 0, 10).unwrap();
     for res in payload {
-        if let Ok(UrgPayload {
-            time_stamp,
-            distance,
-            intensity,
-        }) = res
-        {
-            println!("{}", time_stamp);
-            println!("{:?}", distance);
-            println!("{:?}", intensity);
+        match res {
+            Ok(payload) => {
+                println!("{}", payload.time_stamp);
+                println!("{:?}", payload.distance);
+                println!("{:?}", payload.intensity);
+            }
+            Err(err) => println!("{}", err),
         }
     }
 
