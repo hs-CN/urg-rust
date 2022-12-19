@@ -476,7 +476,7 @@ fn check_send_cmd_response(
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "send cmd: {} failed. recv {} != {}",
+                "check cmd response: {} failed. recv {} != {}",
                 cmd,
                 &buffer[..n - 1].as_bstr(),
                 cmd
@@ -488,7 +488,7 @@ fn check_send_cmd_response(
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "send cmd: {} failed, status error {} != {}",
+                "check cmd response: {} failed, status error {} != {}",
                 cmd,
                 ok_status,
                 &buffer[..n - 2].as_bstr()
