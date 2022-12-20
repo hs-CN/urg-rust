@@ -118,12 +118,15 @@ pub struct Urg {
 impl Urg {
     pub fn open(ip_address: IpAddr, port: u16) -> io::Result<Self> {
         let stream = Arc::new(TcpStream::connect((ip_address, port))?);
-        Ok(Self {
+        let urg = Self {
             stream,
             is_capturing: false,
             ip_address,
             port,
-        })
+        };
+
+        urg.get_version_info()?;
+        Ok(urg)
     }
 
     pub fn get_version_info(&self) -> io::Result<UrgVersionInfo> {
